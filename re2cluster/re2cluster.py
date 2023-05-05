@@ -375,6 +375,7 @@ def cluster(adata: anndata.AnnData,
 
 # Parameters 
 adata = sc.datasets.pbmc3k()
+
 leiden_resolution_min = 0.01
 leiden_resolution_max = 1.4
 leiden_steps = 30
@@ -392,8 +393,6 @@ save_umap = None
 
 n_tiers = 3 
 
-
-adata = adata.copy()
 
 # QC 
 adata = quality_control(adata)
@@ -428,65 +427,53 @@ else:
 parameter_dict = dict()
 
 # Root node (includes all cells)
-adata.obs[f'leiden_tier_0'] = 0
+adata.obs[f'leiden_tier_0'] = '0'
+adata.uns['re2cluster_parameters']=dict()
 
-for tier in tqdm(range(0, n_tiers)):
+for tier in tqdm(range(1, n_tiers+1)):
 
     parameter_dict_tier = dict()
 
-    if tier == 0:
+    leiden_list = list()
 
-        node = 0
-        adata_tmp = adata.copy()
+    # adata.obs is just a dataframe 
+    # groupby all previous cluster assignments of tiers to get unique cluster index per cell
+    # nodes has the form dict{(idx0, .., idxn): [x0, ..., xn]} where idx is the node identity
+    # and x is the row index
+    nodes = adata.obs.groupby(by=[f'leiden_tier_{tier_idx}' 
+                                    for tier_idx in range(tier)]).groups
 
-        cluster_data = cluster(adata_tmp, leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, leiden_steps=leiden_steps, save_deg=None, save_param_scan=None, save_umap=None)
+    for node, indices in nodes.items():
+
+        adata_tmp = adata[indices, :].copy()
+
+        # Stop conditions (no clustering)
+
+        # Minimal cluster size reached - do not cluster
+        # Cluster assignment will be nan (implicitly handled by pd.concat)
+        # In the later steps, np.nan is not a valid groupby key so that all subsequent cluster assignments will also be nan (endpoint reached)
+        if adata_tmp.n_obs < min_cluster_size: 
+            parameter_dict_tier[node] = dict(n_pcs=None, n_neighbors=None, optimal_resolution=None)
+
+            continue
+
+        cluster_data = cluster(adata_tmp, 
+                                leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
+                                leiden_steps=leiden_steps, 
+                                save_deg=None, 
+                                save_param_scan=None, 
+                                save_umap=None)
         
         parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
 
-        leiden = pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}')
-
+        leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
 
         del adata_tmp
+    
+    # concatenate all cluster assignments of current tier
+    leiden = pd.concat(leiden_list)
 
-    else:      
-        leiden_list = list()
-
-        # adata.obs is just a dataframe 
-        # groupby all previous indices to get unique cluster index per cell
-        # nodes has the form dict{(idx0, .., idxn): [x0, ..., xn]} where idx is the node identity
-        # and x is the row index
-        nodes = adata.obs.groupby(by=[f'leiden_tier_{tier_idx}' 
-                                      for tier_idx in range(tier)]).groups
-
-        for node, indices in nodes.items():
-
-            adata_tmp = adata[indices, :].copy()
-
-            # Stop conditions
-            if adata_tmp.n_obs < min_cluster_size: 
-                parameter_dict_tier[node] = dict(n_pcs=None, n_neighbors=None, optimal_resolution=None)
-                leiden_list.append(pd.Series([None]*adata_tmp.n_obs, name=f'leiden_tier_{tier}'))
-
-                continue
-
-            cluster_data = cluster(adata_tmp, 
-                                   leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
-                                   leiden_steps=leiden_steps, 
-                                   save_deg=None, 
-                                   save_param_scan=None, 
-                                   save_umap=None)
-            
-            parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
-
-            leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
-
-            del adata_tmp
-        
-        leiden = pd.concat(leiden_list)
-
-
-    parameter_dict[tier] = parameter_dict_tier
-    adata.obs[f'leiden_tier_{tier}'] = leiden 
-
-
-# %%
+    # Store info in adata object
+    adata.obs = pd.concat([adata.obs, leiden], axis=1)
+    adata.uns['re2cluster_parameters'][tier] = parameter_dict_tier
+    
