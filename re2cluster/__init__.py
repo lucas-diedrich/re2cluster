@@ -1,1 +1,1 @@
-import .re2cluster
+import re2cluster
