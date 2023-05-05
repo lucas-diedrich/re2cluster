@@ -370,110 +370,106 @@ def cluster(adata: anndata.AnnData,
     return cluster_info(n_pcs, n_neighbors, optimal_resolution, adata.obs['leiden'], sc.get.rank_genes_groups_df(adata, group=None))
 
 
+def re2cluster(adata: anndata.AnnData, 
+               leiden_resolution_min: float = 0.01,
+               leiden_resolution_max: float = 1.4,
+               leiden_steps: int = 30,
+               normalization_method: Literal['tpm'] = 'tpm',
+               n_hvg: int = 2000,
+               min_cluster_size: int = 50,
+               save_qc: str = None,
+               save_deg: str = None,
+               save_param_scan: str = None,
+               save_umap: str = None,
+               n_tiers: int = 3) -> anndata.AnnData: 
+    """ Run automated QC and reclustering algorithm """
 
-# if __name__ == '__main__':
+    # QC 
+    adata = quality_control(adata)
 
-# Parameters 
-adata = sc.datasets.pbmc3k()
+    # ## Plotting 
+    a, b, c = plot_quality_control(adata, save=save_qc)
 
-leiden_resolution_min = 0.01
-leiden_resolution_max = 1.4
-leiden_steps = 30
-normalization_method = 'tpm'
-n_hvg = 2000 
-# for pearson normalization, currently not implemented
-# min_cells_per_gene = 3
-
-min_cluster_size = 50
-
-save_qc = None
-save_deg = None
-save_param_scan = None
-save_umap = None
-
-n_tiers = 3 
-
-
-# QC 
-adata = quality_control(adata)
-
-# ## Plotting 
-a, b, c = plot_quality_control(adata, save=save_qc)
-
-if normalization_method == 'tpm':
-    adata = normalize_hvg_tpm(adata, n_hvg=n_hvg)
-# for pearson normalization, currently not implemented 
-# elif normalization_method == 'pearson':
-#     adata = normalize_hvg_pearson(adata, 
-#                                   min_cells_per_gene=min_cells_per_gene, 
-#                                   n_hvg=n_hvg
-#                                   )
-else:
-    raise ValueError(f'Normalization method {normalization_method} not available. Select "tpm"')
+    # Normalization 
+    if normalization_method == 'tpm':
+        adata = normalize_hvg_tpm(adata, n_hvg=n_hvg)
+    # for pearson normalization, currently not implemented 
+    # elif normalization_method == 'pearson':
+    #     adata = normalize_hvg_pearson(adata, 
+    #                                   min_cells_per_gene=min_cells_per_gene, 
+    #                                   n_hvg=n_hvg
+    #                                   )
+    else:
+        raise ValueError(f'Normalization method {normalization_method} not available. Select "tpm"')
 
 
+    # Root node (includes all cells)
+    adata.obs[f'leiden_tier_0'] = '0'
 
-# Parameter dict is supposed to have the format 
-# { tier: 
-#   {node : 
-#       {n_pcs: XXX, 
-#        n_neighbors: XXX, 
-#        optimal_resolution: XXX
-#        }
-#    ...
-#   }
-#   ...
-# }
-parameter_dict = dict()
+    # Parameter dict is supposed to have the format 
+    # { tier: 
+    #   {node : 
+    #       {n_pcs: XXX, 
+    #        n_neighbors: XXX, 
+    #        optimal_resolution: XXX
+    #        }
+    #    ...
+    #   }
+    #   ...
+    # }
+    adata.uns['re2cluster_parameters'] = dict()
 
-# Root node (includes all cells)
-adata.obs[f'leiden_tier_0'] = '0'
-adata.uns['re2cluster_parameters']=dict()
+    for tier in tqdm(range(1, n_tiers+1)):
 
-for tier in tqdm(range(1, n_tiers+1)):
+        parameter_dict_tier = dict()
 
-    parameter_dict_tier = dict()
+        leiden_list = list()
 
-    leiden_list = list()
+        # adata.obs is just a dataframe 
+        # groupby all previous cluster assignments of tiers to get unique cluster index per cell
+        # nodes has the form dict{(idx0, .., idxn): [x0, ..., xn]} where idx is the node identity
+        # and x is the row index
+        nodes = adata.obs.groupby(by=[f'leiden_tier_{tier_idx}' 
+                                        for tier_idx in range(tier)]).groups
 
-    # adata.obs is just a dataframe 
-    # groupby all previous cluster assignments of tiers to get unique cluster index per cell
-    # nodes has the form dict{(idx0, .., idxn): [x0, ..., xn]} where idx is the node identity
-    # and x is the row index
-    nodes = adata.obs.groupby(by=[f'leiden_tier_{tier_idx}' 
-                                    for tier_idx in range(tier)]).groups
+        for node, indices in nodes.items():
 
-    for node, indices in nodes.items():
+            adata_tmp = adata[indices, :].copy()
 
-        adata_tmp = adata[indices, :].copy()
+            # Stop conditions (no clustering)
 
-        # Stop conditions (no clustering)
+            # Minimal cluster size reached - do not cluster
+            # Cluster assignment will be nan (implicitly handled by pd.concat)
+            # In the later steps, np.nan is not a valid groupby key so that all subsequent cluster assignments will also be nan (endpoint reached)
+            if adata_tmp.n_obs < min_cluster_size: 
+                parameter_dict_tier[node] = dict(n_pcs=None, n_neighbors=None, optimal_resolution=None)
 
-        # Minimal cluster size reached - do not cluster
-        # Cluster assignment will be nan (implicitly handled by pd.concat)
-        # In the later steps, np.nan is not a valid groupby key so that all subsequent cluster assignments will also be nan (endpoint reached)
-        if adata_tmp.n_obs < min_cluster_size: 
-            parameter_dict_tier[node] = dict(n_pcs=None, n_neighbors=None, optimal_resolution=None)
+                continue
 
-            continue
+            cluster_data = cluster(adata_tmp, 
+                                    leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
+                                    leiden_steps=leiden_steps, 
+                                    save_deg=None, 
+                                    save_param_scan=None, 
+                                    save_umap=None)
+            
+            parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
 
-        cluster_data = cluster(adata_tmp, 
-                                leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
-                                leiden_steps=leiden_steps, 
-                                save_deg=None, 
-                                save_param_scan=None, 
-                                save_umap=None)
+            leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
+
+            del adata_tmp
         
-        parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
+        # concatenate all cluster assignments of current tier
+        leiden = pd.concat(leiden_list)
 
-        leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
+        # Store info in adata object
+        adata.obs = pd.concat([adata.obs, leiden], axis=1)
+        adata.uns['re2cluster_parameters'][tier] = parameter_dict_tier
 
-        del adata_tmp
+    return adata 
     
-    # concatenate all cluster assignments of current tier
-    leiden = pd.concat(leiden_list)
 
-    # Store info in adata object
-    adata.obs = pd.concat([adata.obs, leiden], axis=1)
-    adata.uns['re2cluster_parameters'][tier] = parameter_dict_tier
-    
+if __name__ == '__main__': 
+
+    adata = sc.datasets.pbmc3k()
+    re2cluster(adata)
