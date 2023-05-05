@@ -1,5 +1,6 @@
 #!/usr/bin/env python 
 
+#%%
 import numpy as np
 import pandas as pd
 
@@ -8,6 +9,10 @@ import scanpy as sc
 
 from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
+
+from collections import namedtuple
+
+from tqdm import tqdm
 
 from typing import List, Tuple, Iterable, Literal
 
@@ -57,7 +62,7 @@ def plot_quality_control(adata: anndata.AnnData, save: str = None):
     if save is not None: 
         plt.savefig(save, bbox_inches='tight')
 
-    return fig, axs
+    return p1, p2, t1
 
 
 def normalize_hvg_pearson(adata: anndata.AnnData, 
@@ -136,7 +141,7 @@ def select_ideal_pcs(adata: anndata.AnnData):
 def silhouette_param_scan(adata: anndata.AnnData,
                           leiden_resolution_min: float,
                           leiden_resolution_max: float,
-                          steps: int) -> Tuple[Iterable, Iterable, Iterable]:
+                          leiden_steps: int) -> Tuple[Iterable, Iterable, Iterable]:
     """ Optimize resolution of leiden clustering by maximizing
         silhouette score.
 
@@ -148,7 +153,7 @@ def silhouette_param_scan(adata: anndata.AnnData,
             Minimal resolution parameter to test 
         leiden_resolution_max : float 
             Maximal resolution parameter to test 
-        steps : int 
+        leiden_steps : int 
             Number of steps for which clustering should be tested
 
         Returns 
@@ -164,9 +169,9 @@ def silhouette_param_scan(adata: anndata.AnnData,
 
     """
     # iterate over these resolutions 
-    leiden_resolution_range = np.linspace(leiden_resolution_min, 
-                                          leiden_resolution_max, 
-                                          steps)
+    leiden_resolution_range = np.logspace(np.log10(leiden_resolution_min), 
+                                          np.log10(leiden_resolution_max), 
+                                          leiden_steps)
     
     # initialize result arrays 
     silhouette_scores = np.zeros(leiden_resolution_range.shape)
@@ -195,8 +200,8 @@ def silhouette_param_scan(adata: anndata.AnnData,
 
 
 def plot_silhouette_param_scan(leiden_resolution_range: Iterable, 
-                               silhouette_scores: np.array, 
-                               n_clusters: np.array, 
+                               silhouette_scores: Iterable, 
+                               n_clusters: Iterable, 
                                save: str = None):
     """ Plot performance of leiden clustering for different resolutions 
 
@@ -259,7 +264,112 @@ def plot_silhouette_param_scan(leiden_resolution_range: Iterable,
 
     return fig, axs
 
-#%%
+
+def cluster(adata: anndata.AnnData, 
+            leiden_resolution_min: float = 0.01,
+            leiden_resolution_max: float = 1.4, 
+            leiden_steps: int = 30, 
+            save_deg: str = None, 
+            save_param_scan: str = None, 
+            save_umap: str = None):
+    """ Wrapper function for workflow based on arbolpy. 
+
+    Performs automated PCA, neighbor graph building, clustering 
+    and UMAP visualization. 
+
+    Returns information about the clustering as named tuple. Optimal parameters
+    (nr of pcs, nr of neighbors, optimal resolution), cluster assignment 
+    and marker genes. 
+    
+    Parameter
+    ---------
+    
+    adata : anndata.Anndata 
+        anndata Object. 
+    leiden_resolution_min : float 
+        Minimal resolution tested during leiden clustering
+    leiden_resolution_max : float 
+        Minimal resolution tested
+    leiden_steps : int
+        Number of different resolutions to test. Evenly (linearly) spaced 
+        between min and max resolution
+    save_deg : None|str 
+        Whether to safe heatmap of differentially expressed genes. 
+        Provide path if yes, default is None (no saving)
+    save_param_scan : None|str 
+        Whether to to safe parameter scan results. 
+        Provide path if yes, default is None (no saving)
+    save_umap : None|str
+        Whether to safe umap plot with cluster annotation
+        Provide path if yes, default is None (no saving)
+
+    
+    Returns 
+    -------
+    n_pcs : int 
+        Number of PCs that where considered
+    n_neighbors : int
+        Number of neighbors that where considered 
+    optimal_resolution : float 
+        Optimal resolution for leiden clustering
+    leiden_clusters : pandas.Series
+        Assignment of clusters to cells 
+    gene_groups : pandas.DataFrame
+        
+
+    """
+    cluster_info = namedtuple('cluster_info', ['n_pcs', 
+                                              'n_neighbors', 
+                                              'optimal_resolution', 
+                                              'leiden_clusters', 
+                                              'markers']
+                                              )
+
+    # PCA
+    # number of PCs can be at most the number of observations in dataset
+    n_comps = min(adata.n_obs - 1, 50)
+    sc.pp.pca(adata, n_comps=n_comps, use_highly_variable= True, svd_solver='arpack')
+    n_pcs = select_ideal_pcs(adata)
+
+    # Neighbors
+    # Select n_neighbors parameter for neighbor graph generation
+    # at most 30
+    n_neighbors = int(min(0.5*np.sqrt(adata.n_obs), 30))
+
+    sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
+
+    # compute optimal clustering 
+    leiden_resolution_range, silhouette_scores, n_clusters = silhouette_param_scan(adata, 
+                                                                                   leiden_resolution_min, 
+                                                                                   leiden_resolution_max, 
+                                                                                   leiden_steps
+                                                                                   )                                                                             
+    
+    optimal_resolution = leiden_resolution_range[np.nanargmax(silhouette_scores)]
+
+    fig, axs = plot_silhouette_param_scan(leiden_resolution_range, 
+                                          silhouette_scores,
+                                          n_clusters,
+                                          save=save_param_scan
+                                          )
+    
+    # run again with optimal parameters 
+    sc.tl.leiden(adata, resolution=optimal_resolution, key_added='leiden', copy=False)
+
+    # Get marker genes
+    sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon', corr_method='benjamini-hochberg')
+
+    # Plotting
+    sc.pl.rank_genes_groups_heatmap(adata, save=save_deg)
+
+
+    # UMAP plotting 
+    sc.tl.umap(adata, random_state=42)
+    sc.pl.umap(adata, color=['leiden'], save=save_umap)
+
+    return cluster_info(n_pcs, n_neighbors, optimal_resolution, adata.obs['leiden'], sc.get.rank_genes_groups_df(adata, group=None))
+
+
 
 # if __name__ == '__main__':
 
@@ -267,73 +377,116 @@ def plot_silhouette_param_scan(leiden_resolution_range: Iterable,
 adata = sc.datasets.pbmc3k()
 leiden_resolution_min = 0.01
 leiden_resolution_max = 1.4
-steps = 30
+leiden_steps = 30
 normalization_method = 'tpm'
 n_hvg = 2000 
-min_cells_per_gene = 3
+# for pearson normalization, currently not implemented
+# min_cells_per_gene = 3
+
+min_cluster_size = 50
+
 save_qc = None
 save_deg = None
 save_param_scan = None
+save_umap = None
+
+n_tiers = 3 
+
+
+adata = adata.copy()
 
 # QC 
 adata = quality_control(adata)
 
 # ## Plotting 
-fig, axs = plot_quality_control(adata, save=save_qc)
+a, b, c = plot_quality_control(adata, save=save_qc)
 
-if normalization_method == 'pearson':
-    adata = normalize_hvg_pearson(adata,
-                                  min_cells_per_gene=min_cells_per_gene, 
-                                  n_hvg=n_hvg
-                                  )
-elif normalization_method == 'tpm':
+if normalization_method == 'tpm':
     adata = normalize_hvg_tpm(adata, n_hvg=n_hvg)
+# for pearson normalization, currently not implemented 
+# elif normalization_method == 'pearson':
+#     adata = normalize_hvg_pearson(adata, 
+#                                   min_cells_per_gene=min_cells_per_gene, 
+#                                   n_hvg=n_hvg
+#                                   )
 else:
-    raise ValueError(f'Normalization method {normalization_method} not available. Select "pearson" or "tpm"')
-
-# PCA
-sc.pp.pca(adata, n_comps=50, use_highly_variable= True, svd_solver='arpack')
-n_pcs = select_ideal_pcs(adata)
-
-# Neighbors
-# Select n_neighbors parameter for neighbor graph generation
-# at most 30
-n_neighbors = int(min(0.5*np.sqrt(adata.n_obs), 30))
-
-sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
-
-# compute optimal clustering 
-leiden_resolution_range, silhouette_scores, n_clusters = silhouette_param_scan(adata, 
-                                                                               leiden_resolution_min, 
-                                                                               leiden_resolution_max, 
-                                                                               steps
-                                                                               )                                                                             )
- 
-optimal_resolution = leiden_resolution_range[np.argmax(silhouette_scores)]
-
-fig, axs = plot_silhouette_param_scan(leiden_resolution_range, 
-                                      silhouette_scores,
-                                      n_clusters,
-                                      save=save_param_scan
-                                      )
-
-# run again with optimal parameters 
-sc.tl.leiden(adata,
-             resolution=optimal_resolution,
-             key_added='leiden',
-             copy=False
-            )
-
-sc.tl.rank_genes_groups(adata, 
-                        groupby='leiden', 
-                        method='wilcoxon', 
-                        corr_method='benjamini-hochberg'
-                        )
+    raise ValueError(f'Normalization method {normalization_method} not available. Select "tpm"')
 
 
-sc.pl.rank_genes_groups_heatmap(adata, save=save_deg)
+
+# Parameter dict is supposed to have the format 
+# { tier: 
+#   {node : 
+#       {n_pcs: XXX, 
+#        n_neighbors: XXX, 
+#        optimal_resolution: XXX
+#        }
+#    ...
+#   }
+#   ...
+# }
+parameter_dict = dict()
+
+# Root node (includes all cells)
+adata.obs[f'leiden_tier_0'] = 0
+
+for tier in tqdm(range(0, n_tiers)):
+
+    parameter_dict_tier = dict()
+
+    if tier == 0:
+
+        node = 0
+        adata_tmp = adata.copy()
+
+        cluster_data = cluster(adata_tmp, leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, leiden_steps=leiden_steps, save_deg=None, save_param_scan=None, save_umap=None)
+        
+        parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
+
+        leiden = pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}')
 
 
-# UMAP plotting 
-sc.tl.umap(adata, random_state=42)
-sc.pl.umap(adata, color=['leiden'])
+        del adata_tmp
+
+    else:      
+        leiden_list = list()
+
+        # adata.obs is just a dataframe 
+        # groupby all previous indices to get unique cluster index per cell
+        # nodes has the form dict{(idx0, .., idxn): [x0, ..., xn]} where idx is the node identity
+        # and x is the row index
+        nodes = adata.obs.groupby(by=[f'leiden_tier_{tier_idx}' 
+                                      for tier_idx in range(tier)]).groups
+
+        for node, indices in nodes.items():
+
+            adata_tmp = adata[indices, :].copy()
+
+            # Stop conditions
+            if adata_tmp.n_obs < min_cluster_size: 
+                parameter_dict_tier[node] = dict(n_pcs=None, n_neighbors=None, optimal_resolution=None)
+                leiden_list.append(pd.Series([None]*adata_tmp.n_obs, name=f'leiden_tier_{tier}'))
+
+                continue
+
+            cluster_data = cluster(adata_tmp, 
+                                   leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
+                                   leiden_steps=leiden_steps, 
+                                   save_deg=None, 
+                                   save_param_scan=None, 
+                                   save_umap=None)
+            
+            parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
+
+            leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
+
+            del adata_tmp
+        
+        leiden = pd.concat(leiden_list)
+
+
+    parameter_dict[tier] = parameter_dict_tier
+    adata.obs[f'leiden_tier_{tier}'] = leiden 
+
+
+# %%
