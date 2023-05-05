@@ -4,13 +4,47 @@ Repetitive unsupervised clustering based on ARBOLpy package.
 
 Reimplementation of [ARBOLpy](https://github.com/jo-m-lab/ARBOLpy.git) package with reduced functionality by K. Kimler (see also original R implementation [ARBOL](https://github.com/jo-m-lab/ARBOL.git))
 
+
+## Installation 
+
+Install from github, ideally in conda environment 
+``` 
+# conda create -n re2cluster python=3.9 ; conda activate re2cluster
+pip install git+https://github.com/lucas-diedrich/re2cluster.git
+
+# Test import 
+python 
+>>> import re2cluster
+```
+
+Run `re2cluster`
+
+```{python}
+import scanpy as sc 
+import re2cluster 
+
+adata = sc.datasets.pbmc3k()
+adata = re2cluster(adata)
+# verbose output 
+```
+Resulting `anndata.AnnData` object will contain new columns in `adata.obs` (`leiden_tier_<i>`, i = 0, ..., n), corresponding to the cluster assignments and it will contain the additional features `adata.uns['re2cluster_parameters']` and `adata.uns['re2cluster_markers']`
+
+
+Uninstall 
+```
+pip uninstall re2cluster
+``` 
+
 ## Missing features 
 
-- Decision not to perform clustering
+- Stop condition, when not to perform clustering
 - Storing marker genes per cluster
-- anndata.Anndata.uns['re2cluster_parameters'] from dict to ndarray 
-- anndata.Anndata.uns['re2cluster_markers'] from dict to ndarray 
+- `anndata.Anndata.uns['re2cluster_parameters']` from dict to ndarray 
+- `anndata.Anndata.uns['re2cluster_markers']` from dict to ndarray 
+- Helper functions to crawl through the dictionaries. 
+- Logging/verbosity
 
+- **tests**
 
 
 ## Reference 
