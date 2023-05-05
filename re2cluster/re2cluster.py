@@ -17,14 +17,6 @@ from tqdm import tqdm
 from typing import List, Tuple, Iterable, Literal
 
 
-def _split_adata_on_identity(adata, identity_column: str) -> List[anndata.AnnData]:
-    """ Subset an anndata.AnnData object based on identity """
-
-    unique_identities = pd.unique(adata.obs[identity_column])
-    adatas = [adata[adata.obs[identity_column] == identity] for identity in unique_identities]
-    return adatas
-
-
 def quality_control(adata):
     """ Calculate qc parameters """
 
