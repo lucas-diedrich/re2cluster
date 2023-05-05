@@ -93,7 +93,7 @@ def normalize_hvg_pearson(adata: anndata.AnnData,
 
 
 def normalize_hvg_tpm(adata: anndata.AnnData, 
-                        n_hvg: int) -> anndata.AnnData: 
+                      n_hvg: int) -> anndata.AnnData: 
     """ Normalize to transcripts per million, log1p normalize and find 
     highly variable genes (hvg) 
     """
@@ -357,7 +357,11 @@ def cluster(adata: anndata.AnnData,
     sc.tl.umap(adata, random_state=42)
     sc.pl.umap(adata, color=['leiden'], save=save_umap)
 
-    return cluster_info(n_pcs, n_neighbors, optimal_resolution, adata.obs['leiden'], sc.get.rank_genes_groups_df(adata, group=None))
+    return cluster_info(n_pcs, 
+                        n_neighbors, 
+                        optimal_resolution, 
+                        adata.obs['leiden'], 
+                        sc.get.rank_genes_groups_df(adata, group=None))
 
 
 def re2cluster(adata: anndata.AnnData, 
@@ -437,11 +441,17 @@ def re2cluster(adata: anndata.AnnData,
     #   }
     #   ...
     # }
+    # Stores optimal clustering parameters
     adata.uns['re2cluster_parameters'] = dict()
+
+    # For every marker genes per cluster 
+    adata.uns['re2cluster_markers'] = dict()
+
 
     for tier in range(1, n_tiers+1):
 
         parameter_dict_tier = dict()
+        markers_dict_tier = dict()
 
         leiden_list = list()
 
@@ -467,15 +477,18 @@ def re2cluster(adata: anndata.AnnData,
                 continue
 
             cluster_data = cluster(adata_tmp, 
-                                    leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
-                                    leiden_steps=leiden_steps, 
-                                    save_deg=None, 
-                                    save_param_scan=None, 
-                                    save_umap=None)
+                                   leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
+                                   leiden_steps=leiden_steps, 
+                                   save_deg=None, 
+                                   save_param_scan=None, 
+                                   save_umap=None
+                                   )
+
+            leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
             
             parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
 
-            leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
+            markers_dict_tier[node] = cluster_data.markers
 
             del adata_tmp
         
@@ -483,8 +496,15 @@ def re2cluster(adata: anndata.AnnData,
         leiden = pd.concat(leiden_list)
 
         # Store info in adata object
+
+        # Cluster assignments in current tier (only unique in combination with prior cluster assignments)
         adata.obs = pd.concat([adata.obs, leiden], axis=1)
+
+        # Optimal cluster parameters
         adata.uns['re2cluster_parameters'][tier] = parameter_dict_tier
+
+        # Marker genes 
+        adata.uns['re2cluster_markers'][tier] = markers_dict_tier
 
     return adata 
     
@@ -493,3 +513,5 @@ if __name__ == '__main__':
 
     adata = sc.datasets.pbmc3k()
     re2cluster(adata)
+
+# %%

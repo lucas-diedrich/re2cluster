@@ -10,7 +10,7 @@ setup(
     author='Lucas Diedrich',
     author_email='ldiedric@broadinstitute.org',
     description='Repetitive unsupervised clustering based on ARBOLpy package.',
-    long_description=long_description, 
+    long_description=long_description,
     packages=find_packages(),
     install_requires=[
         'scanpy', 
