@@ -5,14 +5,12 @@ import numpy as np
 import pandas as pd
 
 import anndata
-import scanpy as sc
+import scanpy as sc 
 
 from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
 
 from collections import namedtuple
-
-from tqdm import tqdm
 
 from typing import List, Tuple, Iterable, Literal
 
@@ -441,7 +439,7 @@ def re2cluster(adata: anndata.AnnData,
     # }
     adata.uns['re2cluster_parameters'] = dict()
 
-    for tier in tqdm(range(1, n_tiers+1)):
+    for tier in range(1, n_tiers+1):
 
         parameter_dict_tier = dict()
 
