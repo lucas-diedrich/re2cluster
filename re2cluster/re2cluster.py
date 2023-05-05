@@ -382,7 +382,37 @@ def re2cluster(adata: anndata.AnnData,
                save_param_scan: str = None,
                save_umap: str = None,
                n_tiers: int = 3) -> anndata.AnnData: 
-    """ Run automated QC and reclustering algorithm """
+    """ Run automated QC and reclustering algorithm 
+    
+    Parameters 
+    ----------
+
+    adata : anndata.Anndata 
+        anndata Object. 
+    leiden_resolution_min : float 
+        Minimal resolution tested during leiden clustering
+    leiden_resolution_max : float 
+        Minimal resolution tested
+    leiden_steps : int
+        Number of different resolutions to test. Evenly (linearly) spaced 
+        between min and max resolution
+    normalization_method : Literal['tpm']
+        Choose between normalization methods. Currently, only tpm is implemented
+    min_cluster_size : int 
+        Minimal cluster size to compute PCA for. Else, cluster identity nan is assigned to
+        cluster in the current tier. 
+    save_deg : None|str 
+        Whether to safe heatmap of differentially expressed genes. 
+        Provide path if yes, default is None (no saving)
+    save_param_scan : None|str 
+        Whether to to safe parameter scan results. 
+        Provide path if yes, default is None (no saving)
+    save_umap : None|str
+        Whether to safe umap plot with cluster annotation
+        Provide path if yes, default is None (no saving)
+    n_tiers : int 
+        Number of clustering steps
+    """
 
     # QC 
     adata = quality_control(adata)
