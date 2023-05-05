@@ -1,8 +1,8 @@
 # re2cluster
-Repetitive unsupervised clustering based on ARBOLpy package.
+Repetitive unsupervised clustering with optimal parameters by optimizing silhouette score. Based on ARBOLpy package.
 
 
-Reimplementation of [ARBOLpy](https://github.com/jo-m-lab/ARBOLpy.git) package with reduced functionality by K. Kimler (see also original R implementation [ARBOL](https://github.com/jo-m-lab/ARBOL.git))
+Reimplementation of [ARBOLpy](https://github.com/jo-m-lab/ARBOLpy.git) package by K. Kimler with reduced functionality (see also original R implementation [ARBOL](https://github.com/jo-m-lab/ARBOL.git))
 
 
 ## Installation 
@@ -35,16 +35,18 @@ Uninstall
 pip uninstall re2cluster
 ``` 
 
+
 ## Missing features 
 
 - Stop condition, when not to perform clustering
-- Storing marker genes per cluster
 - `anndata.Anndata.uns['re2cluster_parameters']` from dict to ndarray 
 - `anndata.Anndata.uns['re2cluster_markers']` from dict to ndarray 
 - Helper functions to crawl through the dictionaries. 
 - Logging/verbosity
+- Store figures
 
 - **tests**
+
 
 
 ## Reference 
