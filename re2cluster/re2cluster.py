@@ -445,13 +445,13 @@ def re2cluster(adata: anndata.AnnData,
     adata.uns['re2cluster_parameters'] = dict()
 
     # For every marker genes per cluster 
-    adata.uns['re2cluster_markers'] = dict()
+    adata.uns['re2cluster_markers'] = list()
 
 
     for tier in range(1, n_tiers+1):
 
         parameter_dict_tier = dict()
-        markers_dict_tier = dict()
+        markers_tier = list()
 
         leiden_list = list()
 
@@ -488,7 +488,10 @@ def re2cluster(adata: anndata.AnnData,
             
             parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
 
-            markers_dict_tier[node] = cluster_data.markers
+            df_markers = cluster_data.markers
+            df_markers['tier'] = tier
+            df_markers['node'] = node
+            markers_tier.append(df_markers)
 
             del adata_tmp
         
@@ -504,8 +507,9 @@ def re2cluster(adata: anndata.AnnData,
         adata.uns['re2cluster_parameters'][tier] = parameter_dict_tier
 
         # Marker genes 
-        adata.uns['re2cluster_markers'][tier] = markers_dict_tier
+        adata.uns['re2cluster_markers'].append(pd.concat(markers_tier, axis=0, join='inner'))
 
+    adata.uns['re2cluster_markers'] = pd.concat(adata.uns['re2cluster_markers'])
     return adata 
     
 
