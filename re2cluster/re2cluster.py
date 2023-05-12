@@ -406,14 +406,18 @@ def re2cluster(adata: anndata.AnnData,
         Provide path if yes, default is None (no saving)
     n_tiers : int 
         Number of clustering steps
+
+
+    Returns 
+    -------
+    adata : anndata.Anndata
+        Modified anndata object that contains cluster assignment in adata.obs columns leiden_tier_{1..n_tier}
+    re2cluster_paramters : pd.DataFrame 
+        Optimal cluster parameters for every iteration (tier: 1...n_tier, subclusters: X.Y.xxx)
+    re2cluster_markers : pd.DataFrame
+        Markers (currently cluster vs. the respective subclusters, which is likely non-desirable)
+    
     """
-
-    # QC 
-    adata = quality_control(adata)
-
-    # ## Plotting 
-    a, b, c = plot_quality_control(adata, save=save_qc)
-
     # Normalization 
     if normalization_method == 'tpm':
         adata = normalize_hvg_tpm(adata, n_hvg=n_hvg)
