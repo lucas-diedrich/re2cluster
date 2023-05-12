@@ -442,15 +442,17 @@ def re2cluster(adata: anndata.AnnData,
     #   ...
     # }
     # Stores optimal clustering parameters
-    adata.uns['re2cluster_parameters'] = dict()
+    # adata.uns['re2cluster_parameters'] = list()
+    re2cluster_parameters = list()
 
     # For every marker genes per cluster 
-    adata.uns['re2cluster_markers'] = list()
+    # adata.uns['re2cluster_markers'] 
+    re2cluster_markers = list()
 
 
     for tier in range(1, n_tiers+1):
 
-        parameter_dict_tier = dict()
+        parameters_tier = list()
         markers_tier = list()
 
         leiden_list = list()
@@ -472,7 +474,13 @@ def re2cluster(adata: anndata.AnnData,
             # Cluster assignment will be nan (implicitly handled by pd.concat)
             # In the later steps, np.nan is not a valid groupby key so that all subsequent cluster assignments will also be nan (endpoint reached)
             if adata_tmp.n_obs < min_cluster_size: 
-                parameter_dict_tier[node] = dict(n_pcs=None, n_neighbors=None, optimal_resolution=None)
+                parameters_tier.append(pd.Series(dict(n_pcs=None, 
+                                                       n_neighbors=None, 
+                                                       optimal_resolution=None
+                                                       ), 
+                                             name='.'.join([str(nidx) for nidx in node])
+                                             )
+                )
 
                 continue
 
@@ -486,11 +494,17 @@ def re2cluster(adata: anndata.AnnData,
 
             leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
             
-            parameter_dict_tier[node] = dict(n_pcs=cluster_data.n_pcs, n_neighbors=cluster_data.n_neighbors, optimal_resolution=cluster_data.optimal_resolution)
+            parameters_tier.append(pd.Series(dict(n_pcs=cluster_data.n_pcs, 
+                                                       n_neighbors=cluster_data.n_neighbors, 
+                                                       optimal_resolution=cluster_data.optimal_resolution
+                                                       ), 
+                                             name='.'.join(node)
+                                             )
+                                  )
 
             df_markers = cluster_data.markers
             df_markers['tier'] = tier
-            df_markers['node'] = node
+            df_markers['node'] = '.'.join(node)
             markers_tier.append(df_markers)
 
             del adata_tmp
@@ -504,18 +518,24 @@ def re2cluster(adata: anndata.AnnData,
         adata.obs = pd.concat([adata.obs, leiden], axis=1)
 
         # Optimal cluster parameters
-        adata.uns['re2cluster_parameters'][tier] = parameter_dict_tier
+        df_parameters_tier = pd.concat(parameters_tier, axis=1).T
+        df_parameters_tier['tier'] = tier
+        re2cluster_parameters.append(df_parameters_tier)
 
         # Marker genes 
-        adata.uns['re2cluster_markers'].append(pd.concat(markers_tier, axis=0, join='inner'))
+        re2cluster_markers.append(pd.concat(markers_tier, axis=0, join='inner'))
 
-    adata.uns['re2cluster_markers'] = pd.concat(adata.uns['re2cluster_markers'])
-    return adata 
+    re2cluster_parameters = pd.concat(re2cluster_parameters, axis=0, join='inner')
+    re2cluster_markers = pd.concat(re2cluster_markers, axis=0, join='inner')
+
+    return adata, re2cluster_parameters, re2cluster_markers
     
 
 if __name__ == '__main__': 
-
+    import shutil 
     adata = sc.datasets.pbmc3k()
-    re2cluster(adata)
+    adata, re2cluster_parameters, re2cluster_markers = re2cluster(adata)
+    adata.write_h5ad('./data/test.h5ad')
+    shutil.rmtree('./data')
 
 # %%
