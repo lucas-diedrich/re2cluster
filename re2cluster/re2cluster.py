@@ -40,7 +40,7 @@ def plot_quality_control(adata: anndata.AnnData, save: str = None):
                        color='pct_counts_mt'
                        )
     
-    p2 = sc.pl.scatter(adata[adata.obs['n_counts']], 'n_counts', 'n_genes',
+    p2 = sc.pl.scatter(adata, 'n_counts', 'n_genes',
                        color='pct_counts_mt'
                        )
     
