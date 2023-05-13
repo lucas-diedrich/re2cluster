@@ -27,7 +27,7 @@ end
 
     data1 --> function1 --> data2
     data2 --> function2 --> data3
-    data3 --> plot1
+    function1 --> plot1
     data3 --> function3 --> data4 --> function4
     function3 --> plot2
     function4 --> plot3
