@@ -40,7 +40,7 @@ def plot_quality_control(adata: anndata.AnnData, save: str = None):
                        color='pct_counts_mt'
                        )
     
-    p2 = sc.pl.scatter(adata[adata.obs['n_counts']<5000], 'n_counts', 'n_genes',
+    p2 = sc.pl.scatter(adata[adata.obs['n_counts']], 'n_counts', 'n_genes',
                        color='pct_counts_mt'
                        )
     
@@ -371,18 +371,18 @@ def re2cluster(adata: anndata.AnnData,
                normalization_method: Literal['tpm'] = 'tpm',
                n_hvg: int = 2000,
                min_cluster_size: int = 50,
-               save_qc: str = None,
                save_deg: str = None,
                save_param_scan: str = None,
                save_umap: str = None,
                n_tiers: int = 3) -> anndata.AnnData: 
     """ Run automated QC and reclustering algorithm 
-    
+    Expects quality controlled anndata object and returns anndata object with assigned subclusters, 
+
     Parameters 
     ----------
 
     adata : anndata.Anndata 
-        anndata Object. 
+        anndata Object.
     leiden_resolution_min : float 
         Minimal resolution tested during leiden clustering
     leiden_resolution_max : float 
