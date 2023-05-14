@@ -4,53 +4,6 @@ Repetitive unsupervised clustering with optimal parameters by optimizing silhoue
 
 Reimplementation of [ARBOLpy](https://github.com/jo-m-lab/ARBOLpy.git) package by K. Kimler with reduced functionality (see also original R implementation [ARBOL](https://github.com/jo-m-lab/ARBOL.git))
 
-## Workflow 
-
-```mermaid
-flowchart TD
-subgraph Workflow
-    data1[Preprocessed data]
-    data2[Modified data] 
-    data3[Quality controled data]
-    data4[Cluster annotated data]
-
-    function1{{re2cluster.comp_qc}}
-    function2{{re2cluster.filter_qc}}
-    function3{{re2cluster.re2cluster}}
-    function4{{re2cluster.xxx}}
-end
-subgraph Output
-    plot1([QC-plots])
-    plot2([Clustering logging])
-    plot3([Cluster result plots])
-end
-
-    data1 --> function1 --> data2
-    data2 --> function2 --> data3
-    function1 --> plot1
-    data3 --> function3 --> data4 --> function4
-    function3 --> plot2
-    function4 --> plot3
-
-
-    style Workflow fill:#ffffff, stroke: #222222, stroke-width:3
-    style Output fill:#eeeeee, stroke: #222222, stroke-width:3
-
-    style data1 fill:#ffffff, stroke:#222222
-    style data2 fill:#ffffff, stroke:#222222
-    style data3 fill:#ffffff, stroke:#222222
-    style data4 fill:#ffffff, stroke:#222222
-
-    style plot1 fill:#C6D4DD, stroke:#C6D4DD
-    style plot2 fill:#C6D4DD, stroke:#C6D4DD
-    style plot3 fill:#C6D4DD, stroke:#C6D4DD 
-
-    style function1 fill:#ffffff, stroke:#1A5276
-    style function2 fill:#ffffff, stroke:#1A5276
-    style function3 fill:#ffffff, stroke:#1A5276
-    style function4 fill:#ffffff, stroke:#1A5276 
-```
-
 
 ## Installation 
 
@@ -85,13 +38,12 @@ pip uninstall re2cluster
 
 ## Missing features 
 
-- Stop condition, when not to perform clustering
-- `anndata.Anndata.uns['re2cluster_parameters']` from dict to ndarray 
-- `anndata.Anndata.uns['re2cluster_markers']` from dict to ndarray 
-- Helper functions to crawl through the dictionaries. 
+- Stop condition
+- Criterium that no clusterings is the ideal clustering approach
 - Logging/verbosity
 - Store figures
-
+- Evaluation functions (adjusted rand index, shannon entropy, gini index)
+- plotting functionalities 
 - **tests**
 
 
