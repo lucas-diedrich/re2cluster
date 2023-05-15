@@ -3,6 +3,7 @@
 #%%
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 import anndata
 import scanpy as sc 
@@ -26,11 +27,55 @@ def quality_control(adata):
     sc.pp.calculate_qc_metrics(adata,
                                qc_vars=['mt'],
                                percent_top=None,
-                               log1p=False,
+                               log1p=True,
                                inplace=True
                                )
     
     return adata
+
+
+def flag_outliers(adata, metric: str, nmads: float = 5):
+    """ Define outliers as cells that deviate by more than N MADs from 
+    the overall cell population. Proposed by sc-best-practices. 
+    
+    The MAD is defined as 
+
+    .. math 
+        MAD = median( |X_i - median(X)| ), X_i \in X 
+    
+    
+
+    Parameters
+    ----------
+    adata: anndata.Adata
+        Dataset for which quality metrics shall be calculated
+    metric: str
+        Column in adata.obs that represents the desired quality metric
+        (e.g. mitochondrial%, ribosomal% etc.)
+    nmads: float
+        Minimal number of median absolut deviations to define a cell as 
+        outlier. Defaults to 5, which is a permissive value according to 
+        sc-best-practices. 
+
+    Returns 
+    -------
+    outlier : pd.Series
+        pd.Series that flags outliers 
+
+    Citation 
+    --------
+    Heumos, L., Schaar, A.C., Lance, C. et al. Best practices for single-cell analysis across modalities. 
+    Nat Rev Genet (2023). https://doi.org/10.1038/s41576-023-00586-w
+
+    Germain, PL., Sonrel, A. & Robinson, M.D. pipeComp, a general framework for the evaluation 
+    of computational pipelines, reveals performant single cell RNA-seq preprocessing tools. 
+    Genome Biol 21, 227 (2020). https://doi.org/10.1186/s13059-020-02136-7
+    """
+    M = adata.obs[metric]
+    outlier = (M < np.median(M) - nmads * stats.median_abs_deviation(M)) | (
+        np.median(M) + nmads * stats.median_abs_deviation(M) < M
+    )
+    return outlier
 
 
 def plot_quality_control(adata: anndata.AnnData, save: str = None):
@@ -357,11 +402,14 @@ def cluster(adata: anndata.AnnData,
     sc.tl.umap(adata, random_state=42)
     sc.pl.umap(adata, color=['leiden'], save=save_umap)
 
+    leiden_clusters = adata.obs['leiden']
+    markers = sc.get.rank_genes_groups_df(adata, group=None)
+
     return cluster_info(n_pcs, 
                         n_neighbors, 
                         optimal_resolution, 
-                        adata.obs['leiden'], 
-                        sc.get.rank_genes_groups_df(adata, group=None))
+                        leiden_clusters, 
+                        markers)
 
 
 def re2cluster(adata: anndata.AnnData, 
@@ -485,7 +533,8 @@ def re2cluster(adata: anndata.AnnData,
                                              name='.'.join([str(nidx) for nidx in node])
                                              )
                 )
-
+                
+                del adata_tmp  
                 continue
 
             cluster_data = cluster(adata_tmp, 
@@ -524,7 +573,7 @@ def re2cluster(adata: anndata.AnnData,
         # Optimal cluster parameters
         df_parameters_tier = pd.concat(parameters_tier, axis=1).T
         df_parameters_tier['tier'] = tier
-        re2cluster_parameters.append(df_parameters_tier)
+        re2cluster_parameters.append(dcd f_parameters_tier)
 
         # Marker genes 
         re2cluster_markers.append(pd.concat(markers_tier, axis=0, join='inner'))
