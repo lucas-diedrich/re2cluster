@@ -26,8 +26,8 @@ def quality_control(adata):
 
     sc.pp.calculate_qc_metrics(adata,
                                qc_vars=['mt'],
-                               percent_top=None,
                                log1p=True,
+                               percent_top=[20],
                                inplace=True
                                )
     
@@ -41,9 +41,7 @@ def flag_outliers(adata, metric: str, nmads: float = 5):
     The MAD is defined as 
 
     .. math 
-        MAD = median( |X_i - median(X)| ), X_i \in X 
-    
-    
+        MAD = median( |X_i - median(X)| ), X_i \in X    
 
     Parameters
     ----------
@@ -573,7 +571,7 @@ def re2cluster(adata: anndata.AnnData,
         # Optimal cluster parameters
         df_parameters_tier = pd.concat(parameters_tier, axis=1).T
         df_parameters_tier['tier'] = tier
-        re2cluster_parameters.append(dcd f_parameters_tier)
+        re2cluster_parameters.append(df_parameters_tier)
 
         # Marker genes 
         re2cluster_markers.append(pd.concat(markers_tier, axis=0, join='inner'))
