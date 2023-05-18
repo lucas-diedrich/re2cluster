@@ -538,9 +538,9 @@ def re2cluster(adata: anndata.AnnData,
             cluster_data = cluster(adata_tmp, 
                                    leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
                                    leiden_steps=leiden_steps, 
-                                   save_deg=None, 
-                                   save_param_scan=None, 
-                                   save_umap=None
+                                   save_deg=save_deg, 
+                                   save_param_scan=save_param_scan, 
+                                   save_umap=save_umap
                                    )
 
             leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
