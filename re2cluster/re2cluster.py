@@ -1,6 +1,8 @@
 #!/usr/bin/env python 
 
 #%%
+import os 
+
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -385,6 +387,7 @@ def cluster(adata: anndata.AnnData,
                                           n_clusters,
                                           save=save_param_scan
                                           )
+    plt.show()
     
     # run again with optimal parameters 
     sc.tl.leiden(adata, resolution=optimal_resolution, key_added='leiden', copy=False)
@@ -393,12 +396,19 @@ def cluster(adata: anndata.AnnData,
     sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon', corr_method='benjamini-hochberg')
 
     # Plotting
-    sc.pl.rank_genes_groups_heatmap(adata, save=save_deg)
+    fig = sc.pl.rank_genes_groups_heatmap(adata, return_fig=True)
+    if save_deg is not None:
+        plt.savefig(save_deg, bbox_inches='tight')
+    plt.show()
 
 
     # UMAP plotting 
     sc.tl.umap(adata, random_state=42)
-    sc.pl.umap(adata, color=['leiden'], save=save_umap)
+
+    fig = sc.pl.umap(adata, color=['leiden'], return_fig=True)
+    if save_umap is not None: 
+        plt.savefig(save_umap, bbox_inches='tight')
+    plt.show()
 
     leiden_clusters = adata.obs['leiden']
     markers = sc.get.rank_genes_groups_df(adata, group=None)
@@ -417,6 +427,7 @@ def re2cluster(adata: anndata.AnnData,
                normalization_method: Literal['tpm'] = 'tpm',
                n_hvg: int = 2000,
                min_cluster_size: int = 50,
+               outdir = None,
                save_deg: str = None,
                save_param_scan: str = None,
                save_umap: str = None,
@@ -464,6 +475,10 @@ def re2cluster(adata: anndata.AnnData,
         Markers (currently cluster vs. the respective subclusters, which is likely non-desirable)
     
     """
+
+    if outdir is None: 
+        outdir = os.getcwd()
+
     # Normalization 
     if normalization_method == 'tpm':
         adata = normalize_hvg_tpm(adata, n_hvg=n_hvg)
@@ -515,6 +530,15 @@ def re2cluster(adata: anndata.AnnData,
                                         for tier_idx in range(tier)]).groups
 
         for node, indices in nodes.items():
+            
+            node_name = '.'.join([str(nidx) for nidx in node])
+
+            if save_deg is not None: 
+                save_deg_path = os.path.join(outdir, f'{node_name}_{save_deg}')
+            if save_param_scan is not None:
+                save_param_scan_path = os.path.join(outdir, f'{node_name}_{save_param_scan}')
+            if save_umap is not None:
+                save_umap_path = os.path.join(outdir, f'{node_name}_{save_umap}')
 
             adata_tmp = adata[indices, :].copy()
 
@@ -528,9 +552,9 @@ def re2cluster(adata: anndata.AnnData,
                                                        n_neighbors=None, 
                                                        optimal_resolution=None
                                                        ), 
-                                             name='.'.join([str(nidx) for nidx in node])
-                                             )
-                )
+                                             name=node_name)
+                                    )
+                
                 
                 del adata_tmp  
                 continue
@@ -538,9 +562,9 @@ def re2cluster(adata: anndata.AnnData,
             cluster_data = cluster(adata_tmp, 
                                    leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
                                    leiden_steps=leiden_steps, 
-                                   save_deg=save_deg, 
-                                   save_param_scan=save_param_scan, 
-                                   save_umap=save_umap
+                                   save_deg=save_deg_path, 
+                                   save_param_scan=save_param_scan_path, 
+                                   save_umap=save_umap_path
                                    )
 
             leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
@@ -585,7 +609,13 @@ def re2cluster(adata: anndata.AnnData,
 if __name__ == '__main__': 
     import shutil 
     adata = sc.datasets.pbmc3k()
-    adata, re2cluster_parameters, re2cluster_markers = re2cluster(adata)
+    # adata, re2cluster_parameters, re2cluster_markers = re2cluster(adata)
+    adata, re2cluster_parameters, re2cluster_markers = re2cluster(adata, 
+                                                                  outdir='./data', 
+                                                                  save_deg='deg.png', 
+                                                                  save_param_scan='param-scan.png', 
+                                                                  save_umap='umap.png')
+    
     adata.write_h5ad('./data/test.h5ad')
     shutil.rmtree('./data')
 
