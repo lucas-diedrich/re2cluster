@@ -154,7 +154,7 @@ def normalize_hvg_tpm(adata: anndata.AnnData,
     return adata
 
 
-def select_ideal_pcs(adata: anndata.AnnData): 
+def select_ideal_pcs(adata: anndata.AnnData, variance_ratio_quantile: float = 0.80): 
     """ Select ideal number of principal components of sc data 
     
     Current criterium: Change in explained variance is in the lowest 15 % quantile
@@ -163,12 +163,14 @@ def select_ideal_pcs(adata: anndata.AnnData):
     ----------
     adata : anndata.Anndata 
         anndata object. Is expected to contain information about pca
+    variance_ratio_quantile : float 
+        Quantile of accepted variance ratio diff. Arbol: 0.85, here we are more permissive
     """
     variance_ratio = adata.uns['pca']['variance_ratio']
     variance_ratio_diff = -1*np.diff(variance_ratio)
 
     # Number of PCs that fullfill criterium
-    n_pcs = (variance_ratio_diff > np.quantile(variance_ratio_diff, 0.85)).sum()
+    n_pcs = (variance_ratio_diff > np.quantile(variance_ratio_diff, variance_ratio_quantile)).sum()
 
     return n_pcs
 
@@ -300,13 +302,14 @@ def plot_silhouette_param_scan(leiden_resolution_range: Iterable,
     return fig, axs
 
 
-def cluster(adata: anndata.AnnData, 
-            leiden_resolution_min: float = 0.01,
-            leiden_resolution_max: float = 1.4, 
-            leiden_steps: int = 30, 
-            save_deg: str = None, 
-            save_param_scan: str = None, 
-            save_umap: str = None):
+def _cluster(adata: anndata.AnnData,
+            variance_ratio_quantile: float,  
+            leiden_resolution_min: float,
+            leiden_resolution_max: float, 
+            leiden_steps: int, 
+            save_deg: str, 
+            save_param_scan: str, 
+            save_umap: str):
     """ Wrapper function for workflow based on arbolpy. 
 
     Performs automated PCA, neighbor graph building, clustering 
@@ -321,6 +324,10 @@ def cluster(adata: anndata.AnnData,
     
     adata : anndata.Anndata 
         anndata Object. 
+    variance_ratio_quantile : float 
+        Parameter for the selection of the ideal number of principal components
+        during the PCA step. The lower, the more permissive. ARBOL defaults to 
+        0.85, while the default here is 0.80. 
     leiden_resolution_min : float 
         Minimal resolution tested during leiden clustering
     leiden_resolution_max : float 
@@ -364,7 +371,7 @@ def cluster(adata: anndata.AnnData,
     # number of PCs can be at most the number of observations in dataset
     n_comps = min(adata.n_obs - 1, 50)
     sc.pp.pca(adata, n_comps=n_comps, use_highly_variable= True, svd_solver='arpack')
-    n_pcs = select_ideal_pcs(adata)
+    n_pcs = select_ideal_pcs(adata, variance_ratio_quantile)
 
     # Neighbors
     # Select n_neighbors parameter for neighbor graph generation
@@ -421,6 +428,7 @@ def cluster(adata: anndata.AnnData,
 
 
 def re2cluster(adata: anndata.AnnData, 
+              variance_ratio_quantile : float = 0.8,  
                leiden_resolution_min: float = 0.01,
                leiden_resolution_max: float = 1.4,
                leiden_steps: int = 30,
@@ -440,6 +448,10 @@ def re2cluster(adata: anndata.AnnData,
 
     adata : anndata.Anndata 
         anndata Object.
+    variance_ratio_quantile : float 
+        Parameter for the selection of the ideal number of principal components
+        during the PCA step. The lower, the more permissive. ARBOL defaults to 
+        0.85, while the default here is 0.80. 
     leiden_resolution_min : float 
         Minimal resolution tested during leiden clustering
     leiden_resolution_max : float 
@@ -559,13 +571,14 @@ def re2cluster(adata: anndata.AnnData,
                 del adata_tmp  
                 continue
 
-            cluster_data = cluster(adata_tmp, 
-                                   leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
-                                   leiden_steps=leiden_steps, 
-                                   save_deg=save_deg_path, 
-                                   save_param_scan=save_param_scan_path, 
-                                   save_umap=save_umap_path
-                                   )
+            cluster_data = _cluster(adata_tmp, 
+                                    variance_ratio_quantile=variance_ratio_quantile,
+                                    leiden_resolution_min=leiden_resolution_min, leiden_resolution_max=leiden_resolution_max, 
+                                    leiden_steps=leiden_steps, 
+                                    save_deg=save_deg_path, 
+                                    save_param_scan=save_param_scan_path, 
+                                    save_umap=save_umap_path
+                                    )
 
             leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
             
