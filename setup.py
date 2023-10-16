@@ -14,8 +14,9 @@ setup(
     packages=find_packages(),
     install_requires=[
         'scanpy', 
+        'leidenalg',
         'pandas',
-        'sklearn',
+        'scikit-learn',
         'matplotlib'
     ]
 )
