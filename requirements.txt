@@ -1,5 +1,5 @@
 scanpy
 leidenalg
 pandas
-sklearn
+scikit-learn
 matplotlib
