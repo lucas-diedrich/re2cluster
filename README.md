@@ -39,12 +39,10 @@ pip uninstall re2cluster
 ## Missing features 
 
 - Stop condition
-- Criterium that no clusterings is the ideal clustering approach
+- Criterium that no clustering is the ideal clustering approach
 - Logging/verbosity
-- Store figures
 - Evaluation functions (adjusted rand index, shannon entropy, gini index)
 - plotting functionalities 
-- **tests**
 
 
 
