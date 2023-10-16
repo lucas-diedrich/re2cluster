@@ -21,12 +21,11 @@ def tmp_dataset_dir(tmpdir_factory):
     sc.settings.datasetdir = old_dir
 
 
-
-def test_re2cluster(): 
+def test_re2cluster(tmp_dataset_dir, tmp_path): 
 
     adata = sc.datasets.pbmc3k()
     adata, re2cluster_parameters, re2cluster_markers = re2cluster(adata, 
-                                                                  outdir='./data', 
+                                                                  outdir=tmp_path, 
                                                                   save_deg='deg.png', 
                                                                   save_param_scan='param-scan.png', 
                                                                   save_umap='umap.png'
