@@ -1,5 +1,4 @@
 #!/usr/bin/env python 
-
 #%%
 import os 
 
@@ -85,7 +84,7 @@ def plot_quality_control(adata: anndata.AnnData, save: str = None):
                        color='pct_counts_mt'
                        )
     
-    p2 = sc.pl.scatter(adata, 'n_counts', 'n_genes',
+    p2 = sc.pl.scatter(adata, 'n_counts', 'n_genes_by_counts',
                        color='pct_counts_mt'
                        )
     
@@ -139,13 +138,13 @@ def normalize_hvg_pearson(adata: anndata.AnnData,
 
 def normalize_hvg_tpm(adata: anndata.AnnData, 
                       n_hvg: int) -> anndata.AnnData: 
-    """ Normalize to transcripts per million, log1p normalize and find 
+    """ Normalize to transcripts per 10000, log1p normalize and find 
     highly variable genes (hvg) 
     """
 
     # normalize data with TPM + log1p
     adata.raw = adata
-    sc.pp.normalize_total(adata, target_sum=10**4)
+    sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata)
 
     # get highly variable genes 
@@ -309,7 +308,9 @@ def _cluster(adata: anndata.AnnData,
             leiden_steps: int, 
             save_deg: str, 
             save_param_scan: str, 
-            save_umap: str):
+            save_umap: str,
+            show: bool = False 
+            ):
     """ Wrapper function for workflow based on arbolpy. 
 
     Performs automated PCA, neighbor graph building, clustering 
@@ -344,6 +345,8 @@ def _cluster(adata: anndata.AnnData,
     save_umap : None|str
         Whether to safe umap plot with cluster annotation
         Provide path if yes, default is None (no saving)
+    show: 
+        Default False
 
     
     Returns 
@@ -394,7 +397,6 @@ def _cluster(adata: anndata.AnnData,
                                           n_clusters,
                                           save=save_param_scan
                                           )
-    plt.show()
     
     # run again with optimal parameters 
     sc.tl.leiden(adata, resolution=optimal_resolution, key_added='leiden', copy=False)
@@ -406,7 +408,6 @@ def _cluster(adata: anndata.AnnData,
     fig = sc.pl.rank_genes_groups_heatmap(adata, return_fig=True)
     if save_deg is not None:
         plt.savefig(save_deg, bbox_inches='tight')
-    plt.show()
 
 
     # UMAP plotting 
@@ -415,7 +416,6 @@ def _cluster(adata: anndata.AnnData,
     fig = sc.pl.umap(adata, color=['leiden'], return_fig=True)
     if save_umap is not None: 
         plt.savefig(save_umap, bbox_inches='tight')
-    plt.show()
 
     leiden_clusters = adata.obs['leiden']
     markers = sc.get.rank_genes_groups_df(adata, group=None)
@@ -429,17 +429,19 @@ def _cluster(adata: anndata.AnnData,
 
 def re2cluster(adata: anndata.AnnData, 
               variance_ratio_quantile : float = 0.8,  
-               leiden_resolution_min: float = 0.01,
+               leiden_resolution_min: float = 0.2,
                leiden_resolution_max: float = 1.4,
                leiden_steps: int = 30,
-               normalization_method: Literal['tpm'] = 'tpm',
+               normalization_method: Literal['tenk'] = 'tenk',
                n_hvg: int = 2000,
                min_cluster_size: int = 50,
                outdir = None,
                save_deg: str = None,
                save_param_scan: str = None,
                save_umap: str = None,
-               n_tiers: int = 3) -> anndata.AnnData: 
+               n_tiers: int = 3, 
+               show: bool = False
+               ) -> anndata.AnnData: 
     """ Run automated QC and reclustering algorithm 
     Expects quality controlled anndata object and returns anndata object with assigned subclusters, 
 
@@ -459,8 +461,8 @@ def re2cluster(adata: anndata.AnnData,
     leiden_steps : int
         Number of different resolutions to test. Evenly (linearly) spaced 
         between min and max resolution
-    normalization_method : Literal['tpm']
-        Choose between normalization methods. Currently, only tpm is implemented
+    normalization_method : Literal['tenk']
+        Choose between normalization methods. Currently, only normalization to 10k counts is implemented
     min_cluster_size : int 
         Minimal cluster size to compute PCA for. Else, cluster identity nan is assigned to
         cluster in the current tier. 
@@ -492,14 +494,8 @@ def re2cluster(adata: anndata.AnnData,
         outdir = os.getcwd()
 
     # Normalization 
-    if normalization_method == 'tpm':
+    if normalization_method == 'tenk':
         adata = normalize_hvg_tpm(adata, n_hvg=n_hvg)
-    # for pearson normalization, currently not implemented 
-    # elif normalization_method == 'pearson':
-    #     adata = normalize_hvg_pearson(adata, 
-    #                                   min_cells_per_gene=min_cells_per_gene, 
-    #                                   n_hvg=n_hvg
-    #                                   )
     else:
         raise ValueError(f'Normalization method {normalization_method} not available. Select "tpm"')
 
@@ -577,7 +573,8 @@ def re2cluster(adata: anndata.AnnData,
                                     leiden_steps=leiden_steps, 
                                     save_deg=save_deg_path, 
                                     save_param_scan=save_param_scan_path, 
-                                    save_umap=save_umap_path
+                                    save_umap=save_umap_path, 
+                                    show = show
                                     )
 
             leiden_list.append(pd.Series(cluster_data.leiden_clusters, name=f'leiden_tier_{tier}'))
@@ -617,19 +614,3 @@ def re2cluster(adata: anndata.AnnData,
     re2cluster_markers = pd.concat(re2cluster_markers, axis=0, join='inner')
 
     return adata, re2cluster_parameters, re2cluster_markers
-    
-
-if __name__ == '__main__': 
-    import shutil 
-    adata = sc.datasets.pbmc3k()
-    # adata, re2cluster_parameters, re2cluster_markers = re2cluster(adata)
-    adata, re2cluster_parameters, re2cluster_markers = re2cluster(adata, 
-                                                                  outdir='./data', 
-                                                                  save_deg='deg.png', 
-                                                                  save_param_scan='param-scan.png', 
-                                                                  save_umap='umap.png')
-    
-    adata.write_h5ad('./data/test.h5ad')
-    shutil.rmtree('./data')
-
-# %%
