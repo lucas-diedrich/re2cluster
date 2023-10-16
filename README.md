@@ -24,11 +24,10 @@ import scanpy as sc
 import re2cluster 
 
 adata = sc.datasets.pbmc3k()
-adata = re2cluster(adata)
+adata, params, markers = re2cluster.re2cluster(adata)
 # verbose output 
 ```
-Resulting `anndata.AnnData` object will contain new columns in `adata.obs` (`leiden_tier_<i>`, i = 0, ..., n), corresponding to the cluster assignments and it will contain the additional features `adata.uns['re2cluster_parameters']` and `adata.uns['re2cluster_markers']`
-
+Resulting `anndata.AnnData` object will contain new columns in `adata.obs` (`leiden_tier_<i>`, i = 0, ..., n), corresponding to the cluster assignments. Additionally, for every node, the clustering parameters and cluster markers will be returned as dataframes. The package also allows to save QC plots for every node of the iterative clustering procedure. 
 
 Uninstall 
 ```
